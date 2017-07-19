@@ -193,7 +193,7 @@ Below is a simple example:
 
 using namespace ww;
 
-storage<int, float> foobar(3);
+storage<int, float> foobar(2);
 foobar.add(42, 3.14); // adds 42
 foobar.add(34, 1.1); // adds 34
 foobar.add(9, 8.765); // discards 42 and adds 9
