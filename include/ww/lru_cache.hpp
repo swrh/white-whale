@@ -7,7 +7,7 @@
 namespace ww {
 
 /**
- * A simple implementation of key-value container using an LRU cache
+ * A simple implementation of a key-value container using an LRU cache
  * replacement policy.
  *
  * This class stores values indexed by keys and discards the least used values.
@@ -20,8 +20,8 @@ namespace ww {
  * ordered by the most recently used keys, and index the items using a
  * std::map. This combination removes the need to search for items in the list
  * when a access is requested and reduces the complexity to the same of the
- * std::map. As it usually is a red black tree, the complexity should be near
- * O(log n).
+ * std::map. As it usually is a binary tree, the complexity should be something
+ * around O(log n).
  */
 template <typename K, typename V> class
 lru_cache
@@ -29,17 +29,17 @@ lru_cache
 public:
     typedef std::list<std::pair<K, V>> list_type;
     typedef std::map<K, typename list_type::iterator> map_type;
-    typedef uint64_t size_type;
+    typedef std::size_t size_type;
 
-    const size_type size;
+    const size_type max_size;
 
 protected:
     list_type pairs;
     map_type table;
 
 public:
-    lru_cache(size_type size)
-        : size(size)
+    lru_cache(size_type max_size)
+        : max_size(max_size)
     {
     }
 
@@ -48,46 +48,48 @@ public:
      *
      * @param[in] key The key to index the value.
      * @param[in] value The value to be stored.
+     *
+     * @return false if an entry from the cache had to be discarded.
      */
-    void
+    bool
     set(const K &key, const V &value)
     {
-        typename map_type::iterator t = table.find(key);
-        if (t != table.end()) {
-            pairs.erase(t->second);
-            table.erase(t);
+        typename map_type::iterator it = table.find(key);
+        if (it != table.end()) {
+            // This key already exists and will be overwritten.
+            pairs.erase(it->second);
+            table.erase(it);
         }
 
         pairs.push_front(make_pair(key, value));
         table.insert(make_pair(key, pairs.begin()));
 
-        while (table.size() > size) {
-            table.erase(pairs.rbegin()->first);
-            pairs.pop_back();
-        }
+        if (table.size() <= max_size)
+            return true;
+
+        // The cache reached its limit and we must discard the least used item.
+        table.erase(pairs.rbegin()->first);
+        pairs.pop_back();
+
+        return false;
     }
 
     /**
      * Retrieve a value from the cache.
      *
      * @param[in] key The key to index the value.
-     * @param[out] value The pointer to the stored value. nullptr if no entry
-     * is found.
      *
-     * @return false in case the entry does not exist.
+     * @return A pointer to the value found.
      */
-    bool
-    get(const K &key, V *&value)
+    V *
+    get(const K &key)
     {
         typename map_type::iterator t = table.find(key);
-        if (t == table.end()) {
-            value = nullptr;
-            return false;
-        }
+        if (t == table.end())
+            return nullptr;
 
         pairs.splice(pairs.begin(), pairs, t->second);
-        value = &t->second->second;
-        return true;
+        return &t->second->second;
     }
 };
 

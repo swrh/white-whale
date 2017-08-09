@@ -1,145 +1,96 @@
 #if !defined(_WW_CONTAINER_HPP_)
 #define _WW_CONTAINER_HPP_
 
-#include <ww/abstract_storage.hpp>
-#include <ww/storage.hpp>
-
-#include <map>
 #include <memory>
 #include <string>
+
+#include <ww/lru_cache.hpp>
 
 namespace ww {
 
 /**
- * The main container class: store multiple tables/containers/storages of
- * key-value entries. These entries are stored and recycled using an LRU cache
- * replacement policy.
+ * A container of a fixed size that accepts as input data any sort of key-value
+ * pair.
+ *
+ * This class is a template that accepts two parameters of any type of data to
+ * be stored. The template parameters are the key and the value types.
  *
  * The data will be stored using the lru_cache<> class. It basically stores the
  * data up to a limit using an LRU cache replacement policy. For more
  * information please check the lru_cache<> class documentation.
  *
- * This class is the main interface of this library. To use it you probably
- * need to call just the main methods: create(), add(), get(), destruct() and
- * get_error() or get_error_string().
+ * There are basically two types of interfaces in this class: the native and
+ * the query interface. Both interfaces have only two methods: an ADD method
+ * and a GET method. The query interface, implemented by the query_{add,get}()
+ * methods, receives and returns data only as strings, and should be used only
+ * when the type of the data being stored or retrieved is unknown or cannot be
+ * specified. As parsing errors might occur, the usage of the get_error() and
+ * get_error_string() is recommended. The native interface, implemented by the
+ * add() and get() methods, is faster and receives only native types as
+ * parameters. This is the recommended interface.
  *
- * Please refer to the documentation of each method for more information.
+ * A basic usage of this class is shown in the test/container.cpp file. Please
+ * refer to it if you want to see examples.
+ *
+ * @see ww::lru_cache
  */
-class
+template <typename K, typename V> class
 container
 {
 public:
-    enum class operation_error {
-        success,
-        unknown_error,
-        invalid_key_or_value_type,
-        container_already_exists,
-        container_not_found,
-        storage_error,
-    };
+    typedef typename lru_cache<K, V>::size_type size_type;
 
 private:
-    typedef std::map<std::string, storage_ptr> map_type;
-
-    map_type storages;
-
-private:
-    storage_weak_ptr last_failing_storage;
-    operation_error error;
-
-    /**
-     * Set the error code as the detail of the last error ocurred.
-     *
-     * This method should only be used at the end of each public method to
-     * describe what error ocurred.
-     */
-    void set_error(operation_error e);
+    lru_cache<K, V> cache;
 
 public:
     /**
-     * Get the operation error code of the last error occurred.
+     * Initializes the container and the internal LRU cache with a maximum size
+     * of 'size'.
      *
-     * @return The last operation error code.
+     * @param size The size of the LRU cache.
      */
-    operation_error get_error() const;
-
-    /**
-     * Get the operation error description of the last error occurred.
-     *
-     * @return The last operation error description.
-     */
-    std::string get_error_string() const;
-
-public:
-    /**
-     * Create a new named container if not created yet.
-     *
-     * This method will create a new container of key and value types specified
-     * in the K and V template parameters, and name and size specified in the
-     * method arguments.
-     *
-     * @param name The name of the new container.
-     * @param n The size of the new container.
-     *
-     * @return false in case the container already exists.
-     */
-    template <typename K, typename V> bool
-    create(const std::string &name, uint64_t n)
+    container(size_type max_size)
+        : cache(max_size)
     {
-        map_type::iterator it = storages.find(name);
-        if (it != storages.end()) {
-            set_error(operation_error::container_already_exists);
-            return false;
-        }
-
-        storages[name] = std::make_shared<storage<K, V>>(n);
-        set_error(operation_error::success);
-        return true;
     }
 
+    ~container()
+    {
+    }
+
+public:
     /**
-     * Add an entry to the container, or overwrite it if the key is already in
-     * use.
+     * Add an entry to the cache. Overwrite if the key had already been added
+     * before. If the cache is full discard the least used entry and return
+     * accordingly.
      *
-     * As string parsing errors might occur, the usage of the get_error() and
-     * get_error_string() is recommended.
+     * @param k The key, the index of the entry to be added.
+     * @param v The value of the new entry.
      *
-     * @param name The name of the new container.
-     * @param key The key, the index of the entry to be added.
-     * @param value The value of the new entry.
-     *
-     * @return false in case an string parsing error occur. For more details
-     * the get_error() or get_error_string() should be called.
+     * @return false if an entry from the cache had to be discarded.
      */
-    bool add(const std::string &name, const std::string &key, const std::string &value);
+    bool
+    add(const K &k, const V &v)
+    {
+        return cache.set(k, v);
+    }
 
     /**
      * Retrieves a value from the container indexed by the key passed as parameter.
      *
-     * If the key is not found in the container a negative response will be emitted.
+     * If the key is not found in the cache a negative response will be emitted.
      *
-     * As string parsing errors might occur, the usage of the get_error() and
-     * get_error_string() is recommended.
+     * @param[in] k The key, the index of the entry to be added.
+     * @return A pointer to the value found in the cache.
      *
-     * @param[in] name The name of the new container.
-     * @param[in] key The key, the index of the entry to be added.
-     * @param[out] value The contents of the requested entry will be written in
-     * this variable.
-     *
-     * @return false in case an string parsing error occur or the entry is not
-     * found. For more details the get_error() or get_error_string() should be
-     * called.
+     * @return false in case the entry is not found in the cache.
      */
-    bool get(const std::string &name, const std::string &key, std::string &value);
-
-    /**
-     * Destroy the named container passsed as argument.
-     *
-     * @param name The name of the container to be destroyed.
-     *
-     * @return false in case the container is not found.
-     */
-    bool destruct(const std::string &name);
+    V *
+    get(const K &k)
+    {
+        return cache.get(k);
+    }
 
 };
 

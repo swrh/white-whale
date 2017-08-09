@@ -2,7 +2,8 @@
 
 This is a simple code that implements a fixed-size key-value container that
 uses an LRU cache replacement policy. It provides mapping between any type of
-key or value and and should be very fast, depending on the interface you use.
+key or value and and should be very fast, but it doesn't serialize the data.
+Yes, it doesn't.
 
 Author: Fernando Silveira (fsilveira@gmail.com)
 
@@ -10,7 +11,8 @@ Author: Fernando Silveira (fsilveira@gmail.com)
 
 I coded this simple library just to accomplish a challenge of a job position I
 applied in 2017. For some unknown reason the name of this company, which is
-located in São Paulo, shall remain a mistery.
+located in São Paulo, shall remain a mistery, just like the feedback I'm still
+waiting for.
 
 ### Language
 
@@ -22,12 +24,6 @@ Software Developer coding challenge", so I chose C++.
 This project requires CMake 3.1 and Boost 1.54.0 and has only been tested on a
 Ubuntu 16.04 operating system.
 
-### Features
-
-* Keys and values are of any type;
-* The basic operations are `add(key, value)` and `get(key)`;
-* It is fast, because no data is stored anywhere but in the RAM memory (DOH! :O)
-
 ### Documentation
 
 Unfortunately the only documentation available at the moment is this README
@@ -35,16 +31,22 @@ file and the comments inline. The simplest Doxygen configuration script should
 be able to retrieve and display everything there is in nice HTML pages. Please
 refer to any Doxygen tutorial to do this.
 
+### Features
+
+* Keys and values are of any type;
+* The basic operations are `add(key, value)` and `get(key)`;
+* It is supposed to be fast, because no complex data storage or parsing is
+  done.
+
 ### Limitations
 
 * This is just *kind of* a proof of concept of an LRU key-value cache. Please
-  do not blame me if you find this useless.
-* Only a single process (possibly multi-threaded) can access a particular
-  database at a time.
+  do not blame me if you find this useless, [I'm just the messenger][1];
+* Only a single process can access a particular database at a time;
 * There is no client-server support builtin to the library.  An application
   that needs such support will have to wrap their own server around the
-  library.
-* No support for UNICODE strings -- I didn't even try;
+  library;
+* No support for UNICODE strings.
 
 ## First steps
 
@@ -56,7 +58,7 @@ To build you do it like any other CMake project:
 $ mkdir build
 $ cd build
 $ cmake ..
-$ make -j4
+$ make
 ```
 
 After that, you can run the tests just by calling `./ww-test`:
@@ -98,123 +100,53 @@ target_compile_options(ww PUBLIC
 ### API
 
 The main part of the library is the `container` class. There we can achieve the
-following 4 operations: CREATE, ADD, GET and DESTRUCT. These 4 operations are
-triggered by 4 method calls with the same name. Here they are:
+following 4 operations: CREATE, ADD, GET and DESTRUCT. These four operations
+are triggered by the constructor, the destructor and two other method calls
+with the same name. Here they are:
 
 ```c++
 #include <ww/container.hpp>
 
-template <typename K, typename V> bool create(const std::string &name, uint64_t n);
-bool add(const std::string &name, const std::string &key, const std::string &value);
-bool get(const std::string &name, const std::string &key, std::string &value);
-bool destruct(const std::string &name);
+template <typename K, typename V> class
+container
+{
+public:
+    container(size_type max_size);
+    ~container();
+    bool add(const K &k, const V &v);
+    V *get(const K &k);
+};
 ```
-
-Before calling any of these objects you must instantiate an object of the
-`container` class:
-
-```c++
-#include <ww/container.hpp>
-
-using namespace ww;
-
-container cont; // the container class is in the 'ww' namespace
-```
-
-Then you can procede to the other operations.
 
 ### CREATE/DESTRUCT
 
-To create a new container you just need to specify its name, the key and the
-value types and its size:
+To create a new container you just need to instantiate it:
 
 ```c++
-cont.create<int, float>("foobar", 3);
+container<int, float> foobar(3);
 ```
 
-There you go: you've created a new container named "foobar" with the cache size of 3.
+There you go: you've created a new container with the cache size of 3.
 
-To destroy you just need to:
-
-```c++
-cont.destruct("foobar");
-```
-
-If something goes wrong (a false is returned anywhere), call:
-
-```c++
-cont.get_error();
-```
-
-... or ...
-
-```c++
-cont.get_error_string();
-```
-
-And this will tell you what is wrong with your setup.
+To destroy you just destroy it (let it go out of scope).
 
 ### ADD/GET
 
 To add and retrieve entries just call the `get()` and `add()`:
 
 ```c++
-cont.add("foobar", "3", "12.34");
-string result;
-cont.get("foobar", "3", result);
+foobar.add(3, 12.34);
+float *result = foobar.get(3);
+assert(result != nullptr);
+assert(*result == 12.34);
 ```
-
-### Adding support for new types
-
-To add support for new types you should implement the
-`string_utils::from_string()` and `string_utils::to_string()` methods in the
-`src/string_utils.cpp` file and ensure your type can be used as `std::map` key.
-
-Suggestion: [What requirements must std::map key classes meet to be valid keys?](https://stackoverflow.com/questions/6573225/what-requirements-must-stdmap-key-classes-meet-to-be-valid-keys)
-
-
-### ATTENTION
-
-Please note that if you use the type `string` you must always prepend and
-append double quotes when passing to the `get()` and `add()` methods.
-
-## Better performance
-
-As you should have noticed the CREATE/ADD/GET/DESTRUCT methods receive and
-return only string values. If you need to achieve a greater performance PLEASE
-AVOID THE `container` CLASS AND USE THE `storage` CLASS DIRECTLY. This way
-you'll avoid the string parsing/formatting/copying/etc and I'm sure you'll be
-much more satisfied.
-
-Below is a simple example:
-
-```c++
-#include <ww/storage.hpp>
-
-using namespace ww;
-
-storage<int, float> foobar(2);
-foobar.add(42, 3.14); // adds 42
-foobar.add(34, 1.1); // adds 34
-foobar.add(9, 8.765); // discards 42 and adds 9
-float result;
-foobar.get(42, result); // will return false
-foobar.get(34, result); // will return true and with result == "1.1"
-```
-
-For more information please visit the `test/storage.cpp` file.
 
 ## Testing
 
-The tests are not so good, I know. I'm sorry, but I spent way too much time
-designing, coding and documenting.
+The tests are not good yet, I'm sorry.
 
 ## LICENSE
 
 BSD 2-clause all the way, baby.
 
-# TODO
-
-* document performance;
-* document the limitations on the string matching;
-* implement a better way to add support for new key/value types
+[1]: https://en.wikipedia.org/wiki/Shooting_the_messenger
