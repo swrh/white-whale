@@ -1,4 +1,4 @@
-# White Whale
+# White Whale [![Travis Build status](https://travis-ci.org/swrh/white-whale.svg?branch=master)](https://travis-ci.org/swrh/white-whale)
 
 This is a simple code that implements a fixed-size key-value container that
 uses an LRU cache replacement policy. It provides mapping between any type of
